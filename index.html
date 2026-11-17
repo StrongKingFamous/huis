@@ -163,6 +163,7 @@ label.f input,label.f select,.txt{border:1px solid var(--line);border-radius:7px
     <button class="btn icon" id="undoBtn" title="Ongedaan maken (Ctrl+Z)">↶</button>
     <button class="btn icon" id="redoBtn" title="Opnieuw (Ctrl+Y)">↷</button>
     <button class="btn" id="backupBtn" title="Ontwerp downloaden als bestand of een bestand openen">Bestand</button>
+    <button class="btn" id="hbBtn" hidden>Inloggen</button>
     <button class="btn primary" id="saveBtn">Opslaan</button>
     <div class="peers" id="peers"></div>
     <div id="saveStatus"></div>
@@ -204,6 +205,7 @@ label.f input,label.f select,.txt{border:1px solid var(--line);border-radius:7px
   <div id="modal" hidden></div>
   <div id="toast"></div>
 </div>
+<script>window.HUIS_API='/api';</script>
 <script id="app-state" type="application/json">null</script>
 <script id="app-code">
 "use strict";
@@ -316,7 +318,7 @@ const OPEN=new Set(['door','slide','window','pui','gap']);
 const isBouw=it=>BOUW.has(it.s), isOpening=it=>OPEN.has(it.s);
 const layerOf=it=>it.s==='rug'||it.s==='rugRound'?0:(it.s==='stairs'||it.s==='stairsQ'||it.s==='void')?1:it.s==='railing'?3:it.s==='wall'?3:isOpening(it)?4:2;
 
-/* ---------- default house (measured from the original floor plans) ---------- */
+/* ---------- default house (measured from the floor plans) ---------- */
 function makeDefault(){
   let n=0; const id=()=> 'h'+(n++);
   const room=(name,x,y,w,h,floor,wall,kind='room')=>({id:id(),name,x,y,w,h,floor,wall:wall||'#f0ebe2',kind});
@@ -461,6 +463,7 @@ function buildDocument(st){
 }
 let saving=false;
 async function saveShared(){
+  if(HB&&ON.canWrite!==true){openLogin();return;}
   if(typeof ON!=='undefined'&&ON.on){syncNow();toast('Wordt automatisch online opgeslagen');return;}
   if(!artifactApi){toast('Opslaan in de pagina werkt hier niet. Je wijzigingen staan wel in deze browser; download ze eventueel als bestand.',5200);openFile();return;}
   if(saving)return;saving=true;updateSaveUI('Opslaan…');
@@ -474,10 +477,10 @@ async function saveShared(){
     updateSaveUI();}
 }
 function updateSaveUI(msg){
-  const st=$('#saveStatus');const dirty=isDirty();
-  if(typeof ON!=='undefined'&&ON.db&&(ON.on||ON.err)){const sb=$('#saveBtn');sb.hidden=ON.on&&ON.canWrite!==false;
+  const st=$('#saveStatus');const dirty=isDirty();try{renderHB();}catch(e){}
+  if(typeof ON!=='undefined'&&ON.db&&(ON.on||ON.err)){const sb=$('#saveBtn');sb.hidden=(ON.on&&ON.canWrite!==false)||!!HB;
     if(ON.err){st.className='dirty';st.textContent=ON.err;}
-    else if(ON.on&&ON.canWrite===false){st.className='dirty';st.textContent='Alleen bekijken · jouw wijzigingen blijven in deze browser';}
+    else if(ON.on&&ON.canWrite===false){st.className='dirty';st.textContent=HB?'Alleen bekijken · log in om te bewerken':'Alleen bekijken · jouw wijzigingen blijven in deze browser';}
     else if(ON.writing||(syncT&&ON.on&&ON.canWrite!==false&&state.variants.some((v,i)=>ON.S.v[v.id]!==serVariant(v,i)))){st.className='';st.textContent='Online opslaan…';}
     else{st.className='';st.textContent='✓ Online opgeslagen'+(ON.lastAt?' '+new Date(ON.lastAt).toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit'}):'');}
     $('#undoBtn').disabled=!undo.length;$('#redoBtn').disabled=!redo.length;return;}
@@ -1236,6 +1239,95 @@ function itemMat(col,m){
   else if(m==='glas'){o.roughness=.05;o.transparent=true;o.opacity=.4;}
   const mm=new THREE.MeshStandardMaterial(o);matCache[key]=mm;return mm;}
 
+/* ---------- eigen server (websiteversie): zelfde interface als de claude.ai-opslag ---------- */
+var HB=(function(){
+  if(!window.HUIS_API||(window.claude&&typeof window.claude.use==='function'))return null;
+  const API=String(window.HUIS_API).replace(/\/$/,'');
+  const ls=(k,v)=>{try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v);}catch(e){return null;}};
+  const rid=()=>Math.random().toString(36).slice(2,10)+Date.now().toString(36);
+  let uidv=ls('huis-user-id');if(!uidv||!/^[A-Za-z0-9_-]{1,80}$/.test(uidv)){uidv='u'+rid();ls('huis-user-id',uidv);}
+  const peerId='p'+rid();
+  const H={api:API,me:uidv,peer:peerId,key:ls('huis-key')||'',name:ls('huis-name')||'',ok:null,loaded:false,failed:false,onFail:[]};
+  const cache=new Map();const colL=new Map(),docL=new Map(),peerL=[];
+  const clone=o=>JSON.parse(JSON.stringify(o));
+  const colSnap=c=>{const docs=[];for(const [p,d] of cache){const i=p.indexOf('/');if(p.slice(0,i)===c)docs.push({id:p.slice(i+1),exists:true,data:()=>clone(d)});}return {metadata:{fromCache:!H.loaded},empty:!docs.length,docs};};
+  const docSnap=p=>{const d=cache.get(p);return {metadata:{fromCache:!H.loaded},exists:d!==undefined,id:p.split('/')[1],data:()=>d===undefined?undefined:clone(d)};};
+  const fireCol=c=>(colL.get(c)||[]).forEach(cb=>{try{cb(colSnap(c));}catch(e){console.error(e);}});
+  const fireDoc=p=>(docL.get(p)||[]).forEach(cb=>{try{cb(docSnap(p));}catch(e){console.error(e);}});
+  const fireAll=()=>{for(const c of colL.keys())fireCol(c);for(const p of docL.keys())fireDoc(p);};
+  const fail=()=>{if(H.loaded||H.failed)return;H.failed=true;H.onFail.forEach(f=>{try{f();}catch(e){}});};
+  function headers(){const h={'Content-Type':'application/json','X-Huis-Key':H.key,'X-Huis-User':H.me};if(H.name)h['X-Huis-Name']=encodeURIComponent(H.name);return h;}
+  async function req(method,p,body){let r;try{r=await fetch(API+p,{method,headers:headers(),body:body===undefined?undefined:JSON.stringify(body)});}catch(e){const er=new Error('offline');er.code='unavailable';throw er;}
+    if(r.status===401){const er=new Error('auth');er.code='invalid_argument';throw er;}
+    if(r.status===413){const er=new Error('size');er.code='quota_exceeded';throw er;}
+    if(!r.ok){const er=new Error('http '+r.status);er.code='unavailable';throw er;}return r.json();}
+  let es=null;
+  function connect(){
+    if(typeof EventSource!=='function'){fail();return;}
+    es=new EventSource(API+'/stream?peer='+peerId);
+    const tFail=setTimeout(fail,9000);
+    es.addEventListener('init',e=>{clearTimeout(tFail);let d={};try{d=JSON.parse(e.data).docs||{};}catch(_){}
+      const old=new Map(cache);cache.clear();Object.entries(d).forEach(([p,v])=>cache.set(p,v));H.loaded=true;
+      // a reconnect after a restart: notify only what changed
+      fireAll();});
+    es.addEventListener('doc',e=>{let m;try{m=JSON.parse(e.data);}catch(_){return;}const p=m.path;if(m.data==null)cache.delete(p);else cache.set(p,m.data);fireCol(p.split('/')[0]);fireDoc(p);});
+    es.addEventListener('peers',e=>{let list=[];try{list=JSON.parse(e.data)||[];}catch(_){}
+      const peers=list.map(x=>({peer:x.peer,by:x.id,isMe:x.peer===peerId,kind:'viewer',presence:x.presence||{},name:x.name,color:x.color}));
+      peers.forEach(x=>{if(x.by&&x.name)profCache[x.by]={name:x.name,color:x.color};});
+      peerL.forEach(cb=>{try{cb({peers});}catch(_){}});});
+    es.onerror=()=>{if(!H.loaded&&es.readyState===2){clearTimeout(tFail);fail();}};
+  }
+  const profCache={};
+  const db={
+    collection:c=>({onSnapshot(cb,err){if(!colL.has(c))colL.set(c,[]);colL.get(c).push(cb);if(H.loaded)setTimeout(()=>cb(colSnap(c)));return ()=>{const a=colL.get(c);const i=a.indexOf(cb);if(i>=0)a.splice(i,1);};}}),
+    doc:p=>({
+      onSnapshot(cb,err){if(!docL.has(p))docL.set(p,[]);docL.get(p).push(cb);if(H.loaded)setTimeout(()=>cb(docSnap(p)));return ()=>{const a=docL.get(p);const i=a.indexOf(cb);if(i>=0)a.splice(i,1);};},
+      async get(){return docSnap(p);},
+      async set(data){await req('PUT','/doc/'+p,data);cache.set(p,clone(data));},
+      async delete(){await req('DELETE','/doc/'+p);cache.delete(p);}
+    })
+  };
+  const user={
+    id:async()=>H.me,
+    can:async()=>{if(!H.key)return false;if(H.ok!==null)return H.ok;try{const r=await fetch(API+'/check',{headers:headers()});H.ok=r.ok;}catch(e){H.ok=false;}return H.ok;},
+    profiles:async ids=>{const out={};const miss=ids.filter(id=>{if(profCache[id]){out[id]=profCache[id];return false;}return true;});
+      if(miss.length){try{const r=await fetch(API+'/profiles?ids='+encodeURIComponent(miss.join(',')));if(r.ok){const d=await r.json();Object.assign(profCache,d);Object.assign(out,d);}}catch(e){}}
+      if(H.name)out[H.me]={name:H.name};return out;}
+  };
+  const room={
+    presence:async pr=>{try{await fetch(API+'/presence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({peer:peerId,id:H.me,name:H.name||'Kijker',presence:pr})});}catch(e){}},
+    onPeers:(cb,err)=>{peerL.push(cb);return ()=>{const i=peerL.indexOf(cb);if(i>=0)peerL.splice(i,1);};}
+  };
+  H.use=async kind=>{if(!es)connect();return kind==='db'?db:kind==='user'?user:kind==='room'?room:null;};
+  H.login=async(name,key)=>{let r;try{r=await fetch(API+'/check',{headers:{'X-Huis-Key':key}});}catch(e){return 'De server is niet bereikbaar. Probeer het zo nog eens.';}
+    if(r.status===401)return 'Dat wachtwoord klopt niet.';if(!r.ok){let m='';try{m=(await r.json()).error;}catch(_){}return m||'Inloggen lukt nu niet.';}
+    ls('huis-key',key);ls('huis-name',name);return '';};
+  H.logout=()=>{ls('huis-key',null);};
+  return H;
+})();
+function openLogin(){
+  if(!HB)return;
+  const close=modal(`<h3>Inloggen om te bewerken</h3><p class="muted" style="margin:0 0 10px">Iedereen kan het ontwerp bekijken. Met het wachtwoord kun je het aanpassen; alles wordt dan automatisch online opgeslagen en jullie zien elkaars wijzigingen meteen.</p>
+    <label class="f" style="display:block;margin-top:8px">Je naam<input id="lgName" maxlength="40" autocomplete="nickname" value="${esc(HB.name||'')}"></label>
+    <label class="f" style="display:block;margin-top:8px">Wachtwoord<input id="lgKey" type="password" autocomplete="current-password"></label>
+    <div class="muted" id="lgErr" style="color:#a33;min-height:18px;margin-top:6px"></div>
+    <div class="row" style="margin-top:10px"><button class="btn" data-act="x">Annuleren</button><button class="btn primary" data-act="ok">Inloggen</button></div>`,(m,cl)=>{
+      m.querySelector('.mbox').style.width='min(420px,100%)';
+      const go=async()=>{const n=m.querySelector('#lgName').value.trim(),k=m.querySelector('#lgKey').value;const er=m.querySelector('#lgErr');
+        if(!n){er.textContent='Vul je naam in, dan ziet de ander wie er iets aanpast.';return;}if(!k){er.textContent='Vul het wachtwoord in.';return;}
+        er.textContent='Even controleren…';const msg=await HB.login(n,k);if(msg){er.textContent=msg;return;}
+        if(isDirty())saveDraft();location.reload();};
+      m.onclick=e=>{if(e.target===m)cl();const b=e.target.closest('[data-act]');if(!b)return;if(b.dataset.act==='x')cl();else go();};
+      m.querySelector('#lgKey').addEventListener('keydown',e=>{if(e.key==='Enter')go();});
+      setTimeout(()=>m.querySelector(HB.name?'#lgKey':'#lgName').focus(),30);
+    });
+}
+function renderHB(){const b=$('#hbBtn');if(!b||!HB)return;b.hidden=!!HB.failed;
+  if(ON.canWrite===true){b.textContent=HB.name||'Ingelogd';b.title='Ingelogd als '+(HB.name||'')+'. Klik om uit te loggen.';}
+  else{b.textContent='Inloggen';b.title='Inloggen om te bewerken';}}
+if(HB){const b=$('#hbBtn');if(b)b.onclick=()=>{if(ON.canWrite===true){if(confirmLogout())return;}openLogin();};}
+function confirmLogout(){modal(`<h3>Uitloggen?</h3><p class="muted">Daarna kun je op deze computer alleen nog bekijken, tot je opnieuw inlogt.</p><div class="row" style="margin-top:12px"><button class="btn" data-act="x">Annuleren</button><button class="btn primary" data-act="out">Uitloggen</button></div>`,(m,cl)=>{m.onclick=e=>{if(e.target===m)cl();const b=e.target.closest('[data-act]');if(!b)return;if(b.dataset.act==='x')cl();else{HB.logout();location.reload();}};});return true;}
+
 /* ---------- online samenwerken (gedeelde database) ---------- */
 var ON={db:null,user:null,room:null,me:null,canWrite:null,on:false,ready:false,writing:false,again:false,queued:false,err:'',lastAt:0,S:{v:{},c:{},i:{},u:''},defaults:null,unsub:[],peers:[]};
 const SYNC_KEY=KEY+'-sync';
@@ -1246,7 +1338,7 @@ function serVariant(v,i){const lv=JSON.parse(JSON.stringify(v.levels));lv.forEac
 function deserVariant(id,d){let lv=[];try{lv=JSON.parse(d.json||'[]');}catch(e){}return {id,name:String(d.name||'Variant'),levels:lv};}
 function defaultSers(){if(ON.defaults)return ON.defaults;const D=makeDefault();ON.defaults={};D.variants.forEach((v,i)=>{ON.defaults[v.id]=JSON.parse(serVariant(v,i)).j;});return ON.defaults;}
 function initOnline(){
-  const c=window.claude;if(!c||typeof c.use!=='function')return;
+  const c=(window.claude&&typeof window.claude.use==='function')?window.claude:HB;if(!c)return;
   Promise.all([c.use('db'),c.use('user'),c.use('room')]).then(async([db,user,room])=>{
     ON.db=db||null;ON.user=user||null;ON.room=room||null;if(!ON.db){updateSaveUI();return;}
     try{ON.me=user?await user.id():null;}catch(e){}
@@ -1373,7 +1465,7 @@ async function renderPeers(){const el=$('#peers');if(!el)return;const ps=ON.peer
     el.appendChild(s);});
   const lab=document.createElement('span');lab.className='peerlab';lab.textContent='ook hier';el.appendChild(lab);}
 
-let onTries=0;(function waitOnline(){try{if(window.claude&&typeof window.claude.use==='function'){initOnline();return;}}catch(e){}if(onTries++<40)setTimeout(waitOnline,250);})();
+let onTries=0;(function waitOnline(){try{if(HB||(window.claude&&typeof window.claude.use==='function')){initOnline();return;}}catch(e){}if(onTries++<40)setTimeout(waitOnline,250);})();
 /* ---------- render all ---------- */
 function ensureState(){if(!state.custom)state.custom=[];if(!state.inspo)state.inspo=[];if(!state.underlays)state.underlays=[null,null,null];}
 function renderAll(){
@@ -1388,11 +1480,12 @@ if(pendingDraft){const bn=$('#banner');bn.hidden=false;bn.innerHTML=`<span>Er st
 renderCatalog();
 renderAll();
 // websiteversie: laad het gepubliceerde ontwerp (ontwerp.json) dat naast de pagina staat
-if(STANDALONE&&/^https?:/.test(location.protocol)){fetch('ontwerp.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(o=>{if(!o||!Array.isArray(o.variants))return;let base=null,hasDraft=false;try{base=localStorage.getItem(KEY+'-site');hasDraft=!!localStorage.getItem(KEY);}catch(e){}
+function loadSiteDesign(){fetch('ontwerp.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(o=>{if(!o||!Array.isArray(o.variants))return;let base=null,hasDraft=false;try{base=localStorage.getItem(KEY+'-site');hasDraft=!!localStorage.getItem(KEY);}catch(e){}
   const stampO=String(o.exported||'');const load=()=>{migrate(o);state.variants=o.variants;state.cur=Math.min(o.cur||0,o.variants.length-1);state.custom=o.custom||[];state.inspo=o.inspo||[];if(o.underlays)state.underlays=o.underlays;savedJSON=JSON.stringify(state);undo=[];redo=[];try{localStorage.setItem(KEY+'-site',stampO);}catch(e){}ui.sel=null;renderCatalog();renderAll();fitView();};
   if(!hasDraft||!base){load();return;}
   if(base!==stampO){const bn=$('#banner');bn.hidden=false;bn.innerHTML=`<span>Er staat een nieuwere versie van het ontwerp online.</span><button class="btn small primary" data-b="ld">Nieuwe versie laden</button><button class="btn small" data-b="keep">Mijn versie houden</button>`;bn.onclick=e=>{const b=e.target.closest('[data-b]');if(!b)return;if(b.dataset.b==='ld')load();else{try{localStorage.setItem(KEY+'-site',stampO);}catch(_){}}bn.hidden=true;};}
 }).catch(()=>{});}
+if(STANDALONE&&/^https?:/.test(location.protocol)){if(HB&&!HB.failed)HB.onFail.push(()=>{ON.db=null;ON.err='';const b=$('#hbBtn');if(b)b.hidden=true;updateSaveUI();loadSiteDesign();});else loadSiteDesign();}
 requestAnimationFrame(()=>fitView());
 window.addEventListener('resize',()=>{if(ui.view==='2d'){if(!userView)fitBox(bbox(lvl(),false),40);render2D();}});
 window.addEventListener('beforeunload',()=>{if(isDirty())saveDraft();});

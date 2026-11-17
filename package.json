@@ -1,0 +1,13 @@
+{
+  "name": "huis-inrichtingsmodel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Inrichtingsmodel met online opslaan en live samenwerken",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: huis
+    runtime: node
+    plan: starter
+    region: frankfurt
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /healthz
+    envVars:
+      - key: HUIS_WACHTWOORD
+        sync: false # vul je zelf in bij het aanmaken
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: huis-data
+      mountPath: /var/data
+      sizeGB: 1
+    domains:
+      - huis.raammaatwerk.nl
