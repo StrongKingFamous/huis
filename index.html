@@ -1675,7 +1675,7 @@ renderAll();
 // websiteversie: laad het gepubliceerde ontwerp (ontwerp.json) dat naast de pagina staat
 function loadSiteDesign(){fetch('ontwerp.json',{cache:'no-store'}).then(r=>r.ok?r.json():null).then(o=>{if(!o||!Array.isArray(o.variants))return;let base=null,hasDraft=false;try{base=localStorage.getItem(KEY+'-site');hasDraft=!!localStorage.getItem(KEY);}catch(e){}
   const stampO=String(o.exported||'');const load=()=>{migrate(o);state.variants=o.variants;state.cur=Math.min(o.cur||0,o.variants.length-1);state.custom=o.custom||[];state.inspo=o.inspo||[];if(o.underlays)state.underlays=o.underlays;savedJSON=JSON.stringify(state);undo=[];redo=[];try{localStorage.setItem(KEY+'-site',stampO);}catch(e){}ui.sel=null;renderCatalog();renderAll();fitView();};
-  if(!hasDraft||!base){load();return;}
+  if(!HB||!hasDraft||!base){load();return;} // zonder eigen server is de site een kopie: altijd de online stand tonen
   if(base!==stampO){const bn=$('#banner');bn.hidden=false;bn.innerHTML=`<span>Er staat een nieuwere versie van het ontwerp online.</span><button class="btn small primary" data-b="ld">Nieuwe versie laden</button><button class="btn small" data-b="keep">Mijn versie houden</button>`;bn.onclick=e=>{const b=e.target.closest('[data-b]');if(!b)return;if(b.dataset.b==='ld')load();else{try{localStorage.setItem(KEY+'-site',stampO);}catch(_){}}bn.hidden=true;};}
 }).catch(()=>{});}
 if(STANDALONE&&/^https?:/.test(location.protocol)){if(HB&&!HB.failed)HB.onFail.push(()=>{ON.db=null;ON.err='';const b=$('#hbBtn');if(b)b.hidden=true;updateSaveUI();loadSiteDesign();});else loadSiteDesign();}
