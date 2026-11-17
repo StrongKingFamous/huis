@@ -141,6 +141,26 @@ label.f input,label.f select,.txt{border:1px solid var(--line);border-radius:7px
   #catalog{max-height:46vh}
   #saveStatus{max-width:none}
 }
+#aiFab{position:absolute;right:12px;top:12px;z-index:6;display:flex;align-items:center;gap:6px;border-radius:999px;padding:8px 14px;box-shadow:0 4px 14px rgba(0,0,0,.15)}
+#aiPanel{position:fixed;right:14px;bottom:14px;top:72px;width:min(400px,calc(100vw - 28px));background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.22);z-index:80;display:flex;flex-direction:column;overflow:hidden}
+#aiPanel .aiHead{display:flex;align-items:center;gap:8px;padding:11px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+#aiPanel .aiHead b{flex:1;font-size:14px}
+#aiLog{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px;font-size:13px;line-height:1.45}
+.aiMsg{max-width:88%;padding:8px 11px;border-radius:12px;white-space:pre-wrap;word-wrap:break-word}
+.aiMsg.me{align-self:flex-end;background:var(--acc);color:#fff;border-bottom-right-radius:4px}
+.aiMsg.bot{align-self:flex-start;background:#f3f0ea;border-bottom-left-radius:4px}
+.aiMsg.bot.err{background:#fbeee6;color:#7a3a14}
+.aiMsg img{display:block;max-width:160px;max-height:120px;border-radius:8px;margin-bottom:6px}
+.aiAct{font-size:11.5px;color:var(--muted);margin-top:6px;white-space:normal}
+.aiAct button{margin-top:6px}
+.aiTips{display:flex;flex-direction:column;gap:6px}
+.aiTips button{text-align:left;white-space:normal;font-size:12.5px}
+#aiForm{border-top:1px solid var(--line);padding:10px;display:flex;flex-direction:column;gap:8px;background:var(--panel)}
+#aiForm textarea{width:100%;resize:none;border:1px solid var(--line);border-radius:10px;padding:8px 10px;font:inherit;font-size:13px;min-height:58px;max-height:140px;box-sizing:border-box}
+#aiForm .row{display:flex;gap:8px;align-items:center}
+#aiForm .aiThumb{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+#aiForm .aiThumb img{width:38px;height:38px;object-fit:cover;border-radius:6px}
+@media (max-width:700px){#aiPanel{top:auto;height:70vh;right:8px;left:8px;width:auto;bottom:8px}}
 </style>
 </head>
 <body>
@@ -199,6 +219,7 @@ label.f input,label.f select,.txt{border:1px solid var(--line);border-radius:7px
       <button class="btn small" data-tb3="eye">Ooghoogte</button>
       <span class="lbl" id="hint3d">Sleep = draaien · Shift/rechts slepen = schuiven · scroll = zoomen</span>
     </div>
+    <button class="btn primary" id="aiFab" hidden title="Vertel wat je wilt, de assistent zet het in het model">✦ Assistent</button>
     <div class="compass" id="compass"><b>↑ Tuin (west)</b><br>Straatkant (oost) ↓</div>
   </main>
   <aside class="right" id="props"></aside>
@@ -1054,10 +1075,10 @@ $('#tb3d').addEventListener('click',e=>{const b=e.target.closest('[data-tb3]');i
 function eyeMode(){const L=lvl();let r=null;if(ui.sel&&ui.sel.type==='room')r=findRoom(ui.sel.id);if(!r){let best=0;L.rooms.forEach((q,i)=>{if(q.kind==='outdoor'||q.detached)return;const a=roomArea(L,i);if(a>best){best=a;r=q;}});}if(!r)return;const c=T3.cam;c.tx=(r.x+r.w/2)/100;c.tz=(r.y+r.h/2)/100;c.ty=1.6;c.r=.05;c.phi=1.5;c.theta=0;T3.camera.fov=68;T3.camera.updateProjectionMatrix();draw3D();toast('Ooghoogte in '+esc(r.name)+'. Sleep om rond te kijken, pijltjes of WASD om te lopen. Klik eerst een ruimte in de lijst om ergens anders te staan.',5200);}
 
 /* ---------- extra capabilities: Claude (images), downloads ---------- */
-let sampleApi=null,sampleImg=false,dlApi=null,capTries=0;
+let sampleApi=null,sampleImg=false,sampleTools=false,dlApi=null,capTries=0;
 function initCaps(){
   try{if(!(window.claude&&typeof window.claude.use==='function')){if(capTries++<40)setTimeout(initCaps,250);return;}}catch(e){return;}
-  window.claude.use('sample').then(async s=>{sampleApi=s||null;if(s){try{const l=await s.limits();sampleImg=!!(l&&l.images);}catch(e){sampleImg=false;}}refreshInspoUI();}).catch(()=>{});
+  window.claude.use('sample').then(async s=>{sampleApi=s||null;if(s){try{const l=await s.limits();sampleImg=!!(l&&l.images);sampleTools=!!(l&&l.tools);}catch(e){sampleImg=false;sampleTools=false;}}refreshInspoUI();try{refreshAI();}catch(e){}}).catch(()=>{});
   window.claude.use('downloads').then(d=>{dlApi=d||null;}).catch(()=>{});
 }
 initCaps();
@@ -1238,6 +1259,179 @@ function itemMat(col,m){
   else if(m==='stof'){o.roughness=.98;o.map=itemTex('stof');}else if(m==='hout'){o.roughness=.65;o.map=itemTex('hout');}else if(m==='steen'){o.roughness=.28;o.map=itemTex('steen');}else if(m==='beton'){o.roughness=.92;o.map=itemTex('beton');}
   else if(m==='glas'){o.roughness=.05;o.transparent=true;o.opacity=.4;}
   const mm=new THREE.MeshStandardMaterial(o);matCache[key]=mm;return mm;}
+
+/* ---------- assistent: in gewone taal meubels plaatsen en aanpassen ---------- */
+const AI={open:false,busy:false,turns:[],ctl:null,img:null,imgUrl:'',steps:0,text:'',cut:0,bot:null};
+function refreshAI(){const f=$('#aiFab');if(!f)return;f.hidden=!(sampleApi&&sampleTools);if(f.hidden&&AI.open)closeAI();}
+function aiFoot(it){const a=(+it.rot||0)*Math.PI/180,c=Math.abs(Math.cos(a)),s=Math.abs(Math.sin(a));const hw=(it.w*c+it.d*s)/2,hd=(it.w*s+it.d*c)/2;return {x0:it.x-hw,x1:it.x+hw,y0:it.y-hd,y1:it.y+hd};}
+function aiOver(a,b,m){return a.x0<b.x1-m&&a.x1>b.x0+m&&a.y0<b.y1-m&&a.y1>b.y0+m;}
+function aiCheck(L,it){
+  const w=[];const fp=aiFoot(it);const soft=x=>x.s==='rug'||x.s==='rugRound'||x.s==='void';
+  const inRoom=L.rooms.some(r=>fp.x0>=r.x-3&&fp.x1<=r.x+r.w+3&&fp.y0>=r.y-3&&fp.y1<=r.y+r.h+3);
+  if(!inRoom){const r=roomAt(L,it.x,it.y,true)||roomAt(L,it.x,it.y,false);w.push(r?`steekt buiten de ruimte "${r.name}" (x ${r.x}..${r.x+r.w}, y ${r.y}..${r.y+r.h})`:'staat buiten alle ruimtes');}
+  if(!soft(it)&&!BOUW.has(it.s)){
+    L.items.forEach(o=>{if(o===it||soft(o)||OPEN.has(o.s))return;
+      if(o.s==='wall'){if(aiOver(fp,aiFoot(o),1))w.push('steekt in muur '+o.id);return;}
+      if(aiOver(fp,aiFoot(o),2))w.push(`overlapt met ${o.id} "${o.n}"`);});
+    L.items.filter(o=>o.s==='door'||o.s==='pui'||o.s==='slide').forEach(dr=>{const hz=normRot(dr.rot)%180===0,cl=dr.s==='door'?dr.w:Math.min(dr.w,80);
+      const r=hz?{x0:dr.x-dr.w/2,x1:dr.x+dr.w/2,y0:dr.y-cl,y1:dr.y+cl}:{x0:dr.x-cl,x1:dr.x+cl,y0:dr.y-dr.w/2,y1:dr.y+dr.w/2};
+      if(aiOver(fp,r,3))w.push(`staat in de doorgang van ${dr.id} "${dr.n}"`);});
+  }
+  return [...new Set(w)].slice(0,6);
+}
+function aiStateText(){
+  const V=curVar();const n=v=>Math.round(v*10)/10;const out=[`Variant: "${V.name}". In beeld: verdieping ${V.levels[ui.level].id}.`];
+  const sel=ui.sel&&ui.sel.type==='item'&&findItem(ui.sel.id);if(sel)out.push(`Geselecteerd: ${sel.id} "${sel.n}".`);
+  V.levels.forEach(L=>{
+    out.push(`\n## Verdieping ${L.id} "${L.name}" (plafond ${L.H||248} cm)`);
+    out.push('Ruimtes (x en y van linksboven tot rechtsonder):');
+    L.rooms.forEach(r=>out.push(`- ${r.id} "${r.name}"${r.kind==='outdoor'?' (buiten)':''}: x ${n(r.x)}..${n(r.x+r.w)}, y ${n(r.y)}..${n(r.y+r.h)}; vloer ${r.floor}; muurkleur ${r.wall}`));
+    out.push('Muren (hartlijn van punt tot punt, d = dikte):');
+    L.items.filter(i=>i.s==='wall').forEach(w=>{const hz=normRot(w.rot)%180===0;const a=hz?[w.x-w.w/2,w.y,w.x+w.w/2,w.y]:[w.x,w.y-w.w/2,w.x,w.y+w.w/2];out.push(`- ${w.id}${w.ext?' buitenmuur':''}: (${n(a[0])},${n(a[1])})-(${n(a[2])},${n(a[3])}) d ${w.d}`);});
+    out.push('Deuren, ramen, trappen:');
+    L.items.filter(i=>BOUW.has(i.s)&&i.s!=='wall').forEach(o=>out.push(`- ${o.id} "${o.n}" ${o.s}: midden (${n(o.x)},${n(o.y)}) ${n(o.w)}x${n(o.d)} rot ${o.rot}`));
+    out.push('Inrichting:');
+    L.items.filter(i=>!BOUW.has(i.s)).forEach(i=>out.push(`- ${i.id} "${i.n}" vorm ${i.s}${CAT[i.k]?' (catalogus '+i.k+')':''}: midden (${n(i.x)},${n(i.y)}) ${n(i.w)}x${n(i.d)}x${n(i.h)} rot ${i.rot}${i.fx?' gespiegeld':''} kleur ${i.c}${i.c2?' kleur2 '+i.c2:''}${i.mat?' materiaal '+i.mat:''}${i.orig?' [zit al in het huis]':''}`));
+  });
+  return out.join('\n');
+}
+function aiRules(){
+  const cat=[];CATALOG.forEach(g=>{if(/^Bouw/.test(g.cat))return;g.items.forEach(a=>cat.push(`${a[0]}: ${a[1]} ${a[2]}x${a[3]}x${a[4]} (${a[6]})`));});
+  (state.custom||[]).forEach(c=>cat.push(`${c.k}: ${c.n} ${c.w}x${c.d}x${c.h} (${c.s}, eigen element)`));
+  return `Je bent de inrichtingsassistent in een plattegrondmodel van het huis van een stel. Zij vertellen wat ze willen; jij voert het uit met het hulpmiddel wijzig_ontwerp en zegt daarna kort wat je deed.
+
+Coördinaten
+- Alles in cm. x loopt naar rechts, y naar beneden. Kleine y = achterkant met de tuin (west), grote y = straatkant (oost). Elke verdieping heeft dezelfde assen.
+- Een element: x,y = het midden; breedte, diepte, hoogte. Bij rot 0 of 180 ligt de breedte langs x en de diepte langs y; bij 90 of 270 andersom.
+- Richting: bij rot 0 zit de achterkant (rugleuning, hoofdeinde van een bed, achterkant van een kast of tv-meubel) aan de kant met de kleinste y en wijst de voorkant naar +y. rot 90: achterkant aan de rechterkant (+x). rot 180: achterkant aan de onderkant (+y). rot 270: achterkant aan de linkerkant (-x).
+- Tegen een muur zetten: achterkant naar de muur; afstand van de hartlijn van de muur tot het midden van het element = muurdikte/2 + diepte/2 + 1.
+- Hoekbank (cornersofa) en keuken hoekopstelling (counterL): bij rot 0 loopt het lange deel langs de achterkant over de volle breedte en het korte deel langs de linkerkant over de volle diepte. gespiegeld=true zet het korte deel rechts.
+- Eettafel met stoelen (dining): de diepte is inclusief stoelen (tafel + 100 cm).
+
+Regels
+- Kies waar het kan een catalogussleutel; die geeft de juiste vorm. Anders een vorm uit: ${Object.keys(SHAPES).join(', ')}.
+- Neem maten over die de gebruiker noemt; anders realistische maten.
+- Kleuren als hex (#rrggbb). Materiaal uit: ${Object.keys(MATS).join(', ')}. Vloeren (sleutel = naam): ${Object.entries(FLOORS).map(([k,f])=>k+' = '+f.n).join('; ')}. Muurkleur als hex; bekende verfkleuren: ${PAINTS.map(p=>p[0]+' '+p[1]).join(', ')}.
+- Laat muren, deuren, ramen en trappen staan; die kun je met dit hulpmiddel niet wijzigen. Elementen met [zit al in het huis] verplaats of vervang je alleen als erom gevraagd wordt.
+- Laat looproutes van minstens 70 cm vrij en zet niets in de doorgang van een deur.
+- Doe alle wijzigingen in één aanroep. Lees de waarschuwingen in het resultaat; staat iets buiten de ruimte, in een muur, over iets anders of voor een deur, verbeter het dan met nog één aanroep.
+- "Vervang X door Y": verwijder X en zet Y op dezelfde plek, of pas X aan.
+- Is iets onduidelijk, kies dan een logische plek en zeg erbij waarom. Vraag alleen terug als je echt niets zinnigs kunt doen.
+- Verzin geen prijzen, merken of links.
+- Je eindantwoord: Nederlands, 1 tot 3 korte zinnen, gewone tekst zonder opmaak en zonder gedachtestreepjes. Noem wat er staat en waar.
+
+Catalogus (sleutel: naam breedte x diepte x hoogte (vorm)):
+${cat.join('\n')}`;
+}
+const AI_TOOL={name:'wijzig_ontwerp',
+  description:'Voert wijzigingen uit in de huidige variant van het ontwerp: elementen toevoegen, aanpassen of verwijderen, en vloer of muurkleur van een ruimte instellen. Geeft per wijziging het resultaat terug, met nieuwe ids, de plek en waarschuwingen (buiten de ruimte, in een muur, overlap, voor een deur).',
+  inputSchema:{type:'object',required:['wijzigingen'],properties:{wijzigingen:{type:'array',items:{type:'object',required:['actie'],properties:{
+    actie:{type:'string',enum:['toevoegen','aanpassen','verwijderen','ruimte']},
+    verdieping:{type:'string',description:'Id van de verdieping (bijv. bg, v1, zo). Nodig bij toevoegen.'},
+    id:{type:'string',description:'Id van het element (aanpassen, verwijderen) of van de ruimte (ruimte).'},
+    catalogus:{type:'string',description:'Catalogussleutel bij toevoegen.'},
+    vorm:{type:'string',description:'Vorm als er geen catalogussleutel past.'},
+    naam:{type:'string'},x:{type:'number'},y:{type:'number'},
+    breedte:{type:'number'},diepte:{type:'number'},hoogte:{type:'number'},rot:{type:'number'},
+    gespiegeld:{type:'boolean'},kleur:{type:'string'},kleur2:{type:'string'},materiaal:{type:'string'},
+    vloer:{type:'string',description:'Vloersleutel (actie ruimte).'},muurkleur:{type:'string',description:'Hex (actie ruimte).'}}}}}},
+  execute:(input,ctx)=>aiApply(input,ctx)};
+function aiApply(input,ctx){
+  if(ctx&&ctx.signal&&ctx.signal.aborted)throw new Error('Gestopt');
+  const ops=Array.isArray(input&&input.wijzigingen)?input.wijzigingen.slice(0,40):[];if(!ops.length)throw new Error('Geen wijzigingen meegegeven');
+  const V=curVar();const res=[];let focus=null;AI.cut=AI.text.length;const before=snapshot();
+  const hex=v=>/^#[0-9a-f]{6}$/i.test(String(v||'').trim())?String(v).trim().toLowerCase():null;
+  const num=(v,lo,hi)=>{const x=parseFloat(v);return isFinite(x)&&x>=lo&&x<=hi?x:null;};
+  const findAny=id=>{for(let li=0;li<V.levels.length;li++){const L=V.levels[li];const i=L.items.findIndex(x=>x.id===id);if(i>=0)return {L,li,it:L.items[i]};}return null;};
+  const lvlIdx=v=>{const s=String(v||'').toLowerCase();return V.levels.findIndex(L=>L.id.toLowerCase()===s||L.name.toLowerCase()===s);};
+  const setFields=(it,o)=>{const nm=String(o.naam||'').trim();if(nm)it.n=nm.slice(0,60);
+    const x=num(o.x,-3000,3000),y=num(o.y,-3000,3000),w=num(o.breedte,1,1500),d=num(o.diepte,1,1500),h=num(o.hoogte,0.5,600),r=num(o.rot,-720,720);
+    if(x!=null)it.x=Math.round(x*2)/2;if(y!=null)it.y=Math.round(y*2)/2;if(w!=null)it.w=Math.round(w);if(d!=null)it.d=Math.round(d);if(h!=null)it.h=Math.round(h);if(r!=null)it.rot=normRot(Math.round(r));
+    if(typeof o.gespiegeld==='boolean'){if(o.gespiegeld)it.fx=true;else delete it.fx;}
+    const c=hex(o.kleur),c2=hex(o.kleur2);if(c)it.c=c;if(c2)it.c2=c2;else if(o.kleur2==='')delete it.c2;
+    if(o.materiaal&&MATS[o.materiaal])it.mat=o.materiaal;
+    if(o.vorm&&SHAPES[o.vorm]&&!BOUW.has(it.s))it.s=o.vorm;};
+  mutate(()=>{ops.forEach((o,n)=>{const nr=n+1;try{
+    const act=String(o.actie||'');
+    if(act==='toevoegen'){
+      const li=lvlIdx(o.verdieping!=null?o.verdieping:V.levels[ui.level].id);if(li<0)throw new Error('Onbekende verdieping '+o.verdieping);const L=V.levels[li];
+      const c=o.catalogus?catDef(String(o.catalogus)):null;if(o.catalogus&&!c)throw new Error('Onbekende catalogussleutel '+o.catalogus);
+      if(c&&BOUW.has(c.s))throw new Error('Muren, deuren en ramen kan de assistent niet toevoegen');
+      const vorm=c?c.s:(SHAPES[o.vorm]?o.vorm:'box');
+      const it={id:uid(),k:c?c.k:'blok',n:c?c.n:'Element',s:vorm,x:0,y:0,w:c?c.w:100,d:c?c.d:60,h:c?c.h:80,rot:0,c:c?c.c:'#c9c9c6'};
+      if(c)['c2','mat','img','link'].forEach(f=>{if(c[f])it[f]=c[f];});
+      if(o.x==null||o.y==null){const r=L.rooms.find(r=>r.kind!=='outdoor');if(r){it.x=r.x+r.w/2;it.y=r.y+r.h/2;}}
+      setFields(it,o);if(!c&&!o.naam)it.n=SHAPES[it.s]||'Element';
+      L.items.push(it);focus={li,id:it.id};
+      res.push({nr,actie:act,id:it.id,naam:it.n,verdieping:L.id,plek:aiFoot(it),waarschuwingen:aiCheck(L,it)});
+    }else if(act==='aanpassen'){
+      const f=findAny(String(o.id||''));if(!f)throw new Error('Element '+o.id+' bestaat niet');if(BOUW.has(f.it.s))throw new Error('Muren, deuren, ramen en trappen kan de assistent niet aanpassen');
+      setFields(f.it,o);focus={li:f.li,id:f.it.id};res.push({nr,actie:act,id:f.it.id,naam:f.it.n,plek:aiFoot(f.it),waarschuwingen:aiCheck(f.L,f.it)});
+    }else if(act==='verwijderen'){
+      const f=findAny(String(o.id||''));if(!f)throw new Error('Element '+o.id+' bestaat niet');if(BOUW.has(f.it.s))throw new Error('Muren, deuren, ramen en trappen kan de assistent niet verwijderen');
+      f.L.items=f.L.items.filter(x=>x!==f.it);res.push({nr,actie:act,id:f.it.id,naam:f.it.n,ok:true});
+    }else if(act==='ruimte'){
+      let li=-1,r=null;V.levels.forEach((L,i)=>{const q=L.rooms.find(q=>q.id===o.id||q.name.toLowerCase()===String(o.id||'').toLowerCase());if(q&&!r&&(o.verdieping==null||lvlIdx(o.verdieping)===i)){r=q;li=i;}});
+      if(!r)throw new Error('Ruimte '+o.id+' bestaat niet');
+      if(o.vloer){if(!FLOORS[o.vloer])throw new Error('Onbekende vloer '+o.vloer);r.floor=o.vloer;}
+      const wc=hex(o.muurkleur);if(o.muurkleur&&!wc)throw new Error('Muurkleur moet hex zijn');if(wc)r.wall=wc;
+      focus=focus||{li,id:null};res.push({nr,actie:act,ruimte:r.name,vloer:r.floor,muurkleur:r.wall});
+    }else throw new Error('Onbekende actie '+act);
+  }catch(e){res.push({nr,fout:String(e&&e.message||e)});}});},{noRender:true});
+  if(snapshot()!==before)AI.steps++;
+  if(focus){ui.level=focus.li;ui.sel=focus.id?{type:'item',id:focus.id}:null;if(ui.mode!=='furnish')ui.mode='furnish';}
+  renderAll();
+  const done=res.filter(r=>!r.fout).length;aiProgress(done?`${done} wijziging${done===1?'':'en'} doorgevoerd…`:'Even opnieuw proberen…');
+  return res;
+}
+function aiProgress(t){if(AI.bot)AI.bot.prog=t;const el=$('#aiLog .aiMsg.bot.pending .aiAct');if(el)el.textContent=t;}
+function openAI(){
+  if(AI.open)return;AI.open=true;const p=document.createElement('div');p.id='aiPanel';
+  p.innerHTML=`<div class="aiHead"><b>✦ Assistent</b><button class="btn small" id="aiClear" title="Gesprek leegmaken">Nieuw gesprek</button><button class="btn small icon" id="aiClose" title="Sluiten">×</button></div>
+  <div id="aiLog"></div>
+  <form id="aiForm"><textarea id="aiIn" placeholder="Bijv. zet een donkergroene fluwelen 3-zitsbank tegen de linkermuur van de woonkamer"></textarea>
+  <div class="row"><label class="btn small" id="aiPick" ${sampleImg?'':'hidden'} title="Foto meesturen">📷 Foto<input type="file" accept="image/*" hidden id="aiFile"></label><span class="aiThumb" id="aiThumb"></span><span style="flex:1"></span><button type="button" class="btn small" id="aiStop" hidden>Stop</button><button class="btn primary small" id="aiSend">Versturen</button></div></form>`;
+  document.body.appendChild(p);renderAILog();
+  $('#aiClose').onclick=closeAI;$('#aiClear').onclick=()=>{if(AI.busy)return;AI.turns=[];renderAILog();};
+  $('#aiForm').onsubmit=e=>{e.preventDefault();aiSend();};
+  $('#aiIn').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();aiSend();}e.stopPropagation();});
+  $('#aiIn').addEventListener('keyup',e=>e.stopPropagation());
+  $('#aiStop').onclick=()=>{if(AI.ctl)AI.ctl.abort();};
+  $('#aiFile').onchange=async e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(!f)return;try{AI.imgUrl=await fileToJpeg(f,1400);AI.img=dataUrlToBlob(AI.imgUrl);renderThumb();}catch(er){toast('Deze foto kon niet gelezen worden');}};
+  setTimeout(()=>$('#aiIn').focus(),30);
+}
+function closeAI(){const p=$('#aiPanel');if(p)p.remove();AI.open=false;}
+function renderThumb(){const t=$('#aiThumb');if(!t)return;t.innerHTML=AI.imgUrl?`<img src="${AI.imgUrl}" alt=""><button type="button" class="btn small" id="aiNoImg">weg</button>`:'';const b=$('#aiNoImg');if(b)b.onclick=()=>{AI.img=null;AI.imgUrl='';renderThumb();};}
+function renderAILog(){
+  const log=$('#aiLog');if(!log)return;
+  if(!AI.turns.length){log.innerHTML=`<div class="aiMsg bot">Vertel wat je in het huis wilt, dan zet ik het erin. Kleur, materiaal en maat mag je er gewoon bij zeggen.${sampleImg?' Je kunt ook een foto meesturen.':''}</div>
+    <div class="aiTips">${['Zet een eettafel van eikenhout voor 6 personen bij het raam in de woonkamer','Maak de muren van de slaapkamers saliegroen','Vervang de bank door een cognac leren hoekbank','Richt slaapkamer 3 in als babykamer'].map(t=>`<button class="btn small" data-tip="${esc(t)}">${esc(t)}</button>`).join('')}</div>`;
+    log.querySelectorAll('[data-tip]').forEach(b=>b.onclick=()=>{$('#aiIn').value=b.dataset.tip;$('#aiIn').focus();});return;}
+  log.innerHTML=AI.turns.map(t=>t.role==='user'?`<div class="aiMsg me">${t.img?`<img src="${t.img}" alt="">`:''}${esc(t.show)}</div>`:`<div class="aiMsg bot${t.err?' err':''}${t.pending?' pending':''}">${esc(t.content||'')}${t.pending?`<div class="aiAct">${esc(t.prog||'Even denken…')}</div>`:''}${t.steps?`<div class="aiAct"><button class="btn small" data-undo="${t.steps}">Ongedaan maken</button></div>`:''}</div>`).join('');
+  log.querySelectorAll('[data-undo]').forEach(b=>b.onclick=()=>{const n=+b.dataset.undo;for(let i=0;i<n;i++)doUndo();b.parentElement.textContent='Teruggedraaid.';const t=AI.turns.find(x=>x.steps===n&&!x.undone);if(t){t.undone=true;t.steps=0;}});
+  log.scrollTop=log.scrollHeight;
+}
+async function aiSend(){
+  if(AI.busy||!sampleApi)return;const box=$('#aiIn');const q=box.value.trim();if(!q&&!AI.img)return;
+  const userText=q||'Zet dit in het model.';box.value='';
+  const img=AI.img,imgUrl=AI.imgUrl;AI.img=null;AI.imgUrl='';renderThumb();
+  AI.turns.push({role:'user',content:userText+(img?'\n(Er is een foto meegestuurd; die zie je alleen bij deze vraag.)':''),show:userText,img:imgUrl});
+  const bot={role:'assistant',content:'',pending:true};AI.turns.push(bot);renderAILog();
+  AI.bot=bot;AI.text='';AI.cut=0;AI.busy=true;AI.steps=0;AI.ctl=new AbortController();$('#aiSend').disabled=true;$('#aiStop').hidden=false;
+  const hist=AI.turns.filter(t=>t!==bot&&!t.err&&t.content).slice(-12).map(t=>({role:t.role,content:t.content}));
+  while(hist.length&&hist[0].role!=='user')hist.shift();
+  const last=hist.pop();
+  const input=[{role:'user',content:aiRules()},...hist,{role:'user',content:'Huidige stand van het ontwerp:\n'+aiStateText()+'\n\nVraag: '+last.content}];
+  const opts={tools:[AI_TOOL],signal:AI.ctl.signal,onText:({text})=>{AI.text=text;bot.content=text.slice(AI.cut).trim();renderAILog();}};
+  if(img&&sampleImg)opts.images=[img];
+  try{const r=await sampleApi(input,opts);const full=r.text||'';bot.content=full.slice(Math.min(AI.cut,full.length)).trim()||full.trim().split(/\n\s*\n/).pop()||'Klaar.';}
+  catch(e){const code=e&&e.code;bot.err=code!=='cancelled';
+    bot.content={cancelled:'Gestopt.',not_granted:'Je hebt Claude hier geen toestemming gegeven, dus de assistent kan niets doen.',sampling_disabled:'Claude is voor dit account niet beschikbaar.',rate_limited:'Even te veel verzoeken. Probeer het over een minuut opnieuw.',tools_unavailable:'De assistent werkt in deze weergave niet.',image_rejected:'Deze foto werd niet geaccepteerd. Probeer een jpg of png.',refused:'Daar kan ik niet mee helpen.',prompt_too_large:'Het ontwerp is te groot geworden om in één keer mee te sturen. Begin een nieuw gesprek.'}[code]||'Dat lukte niet. Probeer het opnieuw.';
+    if(code==='not_granted'||code==='sampling_disabled'||code==='tools_unavailable'){sampleApi=code==='tools_unavailable'?sampleApi:null;if(code==='tools_unavailable')sampleTools=false;refreshAI();}}
+  bot.pending=false;bot.steps=AI.steps;AI.busy=false;AI.ctl=null;
+  const sb=$('#aiSend');if(sb)sb.disabled=false;const st=$('#aiStop');if(st)st.hidden=true;renderAILog();
+}
+$('#aiFab').onclick=()=>AI.open?closeAI():openAI();
 
 /* ---------- eigen server (websiteversie): zelfde interface als de claude.ai-opslag ---------- */
 var HB=(function(){
