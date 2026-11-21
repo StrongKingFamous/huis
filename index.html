@@ -134,12 +134,36 @@ label.f input,label.f select,.txt{border:1px solid var(--line);border-radius:7px
 #banner[hidden]{display:none}
 .tbtabs{display:none}
 @media (max-width:980px){
-  #app{grid-template-columns:1fr;grid-template-rows:auto minmax(320px,58vh) auto;height:auto;min-height:100vh}
-  header.top{flex-wrap:wrap;padding:8px 10px;gap:6px}
-  .brand .t2{display:none}
-  aside.left,aside.right{border:0;border-top:1px solid var(--line);max-height:none}
-  #catalog{max-height:46vh}
-  #saveStatus{max-width:none}
+  html,body{overflow:hidden}
+  #app{display:block;position:relative;height:100vh;height:100dvh;overflow:hidden}
+  header.top{position:absolute;left:0;right:0;top:0;height:54px;flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;padding:0 10px;gap:6px;z-index:30;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  header.top::-webkit-scrollbar{display:none}
+  header.top>*{flex:none}
+  header.top .spacer{display:none}
+  .brand{display:none}
+  #viewSeg{order:1}#saveBtn{order:2}.variant{order:3}#undoBtn{order:4}#redoBtn{order:5}#modeSeg{order:6}#backupBtn{order:7}#hbBtn{order:8}.peers{order:9}#saveStatus{order:10}
+  .variant .menu{position:fixed;top:58px;left:10px;right:auto}
+  #saveStatus{max-width:150px}
+  .stage{position:absolute;left:0;right:0;top:54px;bottom:58px}
+  aside.left,aside.right{position:absolute;left:0;right:0;top:54px;bottom:58px;z-index:25;display:none;overflow:auto;border:0;-webkit-overflow-scrolling:touch}
+  #app[data-m="cat"] aside.left{display:flex}
+  #app[data-m="props"] aside.right{display:block}
+  #catalog{max-height:none;overflow:visible;flex:none}
+  .cgrid{grid-template-columns:repeat(3,1fr)}
+  .tbtabs{display:flex;position:absolute;left:0;right:0;bottom:0;height:58px;z-index:40;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+  .tbtabs button{flex:1;border:0;background:none;font-weight:600;color:var(--muted);font-size:13px;position:relative}
+  .tbtabs button.on{color:var(--acc);box-shadow:inset 0 3px 0 var(--acc)}
+  .tbtabs i{display:none;position:absolute;top:12px;right:calc(50% - 38px);width:8px;height:8px;border-radius:50%;background:var(--warn)}
+  .tbtabs i.on{display:block}
+  .toolbar{left:8px;right:8px;bottom:8px;max-width:none;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .toolbar>*{flex:none}
+  .compass{display:none}
+  input,select,textarea{font-size:16px}
+  .seg button,.btn{padding-top:8px;padding-bottom:8px}
+  .overlay-tl{right:96px;max-width:none}
+  .notice{display:none}
+  #aiFab{top:10px;right:10px;padding:7px 12px}
+  #aiPanel{bottom:8px}
 }
 #aiFab{position:absolute;right:12px;top:12px;z-index:6;display:flex;align-items:center;gap:6px;border-radius:999px;padding:8px 14px;box-shadow:0 4px 14px rgba(0,0,0,.15)}
 #aiPanel{position:fixed;right:14px;bottom:14px;top:72px;width:min(400px,calc(100vw - 28px));background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.22);z-index:80;display:flex;flex-direction:column;overflow:hidden}
@@ -223,6 +247,7 @@ label.f input,label.f select,.txt{border:1px solid var(--line);border-radius:7px
     <div class="compass" id="compass"><b>↑ Tuin (west)</b><br>Straatkant (oost) ↓</div>
   </main>
   <aside class="right" id="props"></aside>
+  <nav class="tbtabs" id="mTabs"><button data-m="plan" class="on">Plattegrond</button><button data-m="cat">Meubels</button><button data-m="props">Details<i id="mDot"></i></button></nav>
   <div id="modal" hidden></div>
   <div id="toast"></div>
 </div>
@@ -918,6 +943,15 @@ props.addEventListener('click',e=>{
 });
 $('#catalog').addEventListener('click',e=>{const x=e.target.closest('[data-delcustom]');if(x){e.stopPropagation();const k=x.dataset.delcustom;const c=catDef(k);askConfirm('“'+esc(c?c.n:'')+'” uit de catalogus halen? Geplaatste exemplaren blijven staan.','Weghalen',()=>{state.custom=state.custom.filter(q=>q.k!==k);markDirty();renderCatalog();});return;}const b=e.target.closest('[data-add]');if(b)addItem(b.dataset.add);});
 $('#catSearch').addEventListener('input',renderCatalog);
+/* ---------- telefoon: tabs onderin ---------- */
+function setM(m){const a=$('#app');a.dataset.m=m;document.querySelectorAll('#mTabs button').forEach(b=>b.classList.toggle('on',b.dataset.m===m));if(m==='plan'){setTimeout(()=>{window.dispatchEvent(new Event('resize'));},30);}}
+function updateMDot(){const d=$('#mDot');if(d)d.classList.toggle('on',!!(ui.sel&&(ui.sel.type==='item'||ui.sel.type==='room'))&&$('#app').dataset.m!=='props');}
+$('#mTabs').addEventListener('click',e=>{const b=e.target.closest('[data-m]');if(b){setM(b.dataset.m);updateMDot();}});
+$('#app').dataset.m='plan';
+{const _rp=renderProps;renderProps=function(){_rp.apply(this,arguments);updateMDot();};}
+$('#catalog').addEventListener('click',e=>{if(innerWidth<=980&&e.target.closest('[data-add]'))setM('plan');});
+$('#levelTabs').addEventListener('click',e=>{if(innerWidth<=980&&e.target.closest('[data-level]'))setM('plan');});
+
 $('#btnInspo').onclick=()=>{const s=ui.sel&&ui.sel.type==='item'&&findItem(ui.sel.id);openInspo(null,s&&!isBouw(s)?s.id:null);};$('#btnCustom').onclick=openCustom;
 $('#levelTabs').addEventListener('click',e=>{const b=e.target.closest('[data-level]');if(!b)return;ui.level=+b.dataset.level;ui.sel=null;ui.measure=null;if(ui.tool==='underlay'||ui.tool==='calibrate')ui.tool=null;renderAll();if(ui.view==='2d')fitView();else reset3DCam();});
 $('#modeSeg').addEventListener('click',e=>{const b=e.target.closest('[data-mode]');if(!b)return;ui.mode=b.dataset.mode;ui.sel=null;renderAll();if(ui.mode==='plan')toast('Plattegrond aanpassen: sleep ruimtes, muren, deuren en ramen. Meubels staan even op de achtergrond.',3800);});
