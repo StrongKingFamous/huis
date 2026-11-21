@@ -292,7 +292,7 @@ const CATALOG=[
   ['kachel','Houtkachel',50,45,110,'#2b2b2b','box'],['piano','Piano',150,60,125,'#2b2b2b','box']]},
  {cat:'Eetkamer',items:[
   ['eettafel4','Eettafel 4p + stoelen',140,190,75,'#c49a6c','dining'],['eettafel6','Eettafel 6p + stoelen',200,195,75,'#c49a6c','dining'],
-  ['eettafel8','Eettafel 8p + stoelen',260,200,75,'#6b4a33','dining'],['eettafel_rond','Ronde eettafel 4p',220,220,75,'#e9e3d6','roundDining'],
+  ['eettafel8','Eettafel 8p + stoelen',260,200,75,'#6b4a33','dining'],['eettafel_rond','Ronde eettafel 4p',220,220,75,'#e9e3d6','roundDining'],['eettafel_oval6','Ovale eettafel 6p + stoelen',200,200,75,'#6b4a33','ovalDining'],
   ['eettafel_los','Eettafel los',200,100,75,'#c49a6c','table'],['stoel','Stoel',45,50,85,'#2b2b2b','chair'],
   ['dressoir','Dressoir',180,45,80,'#6b4a33','cabinet'],['barkruk','Barkruk',40,40,75,'#2b2b2b','pouf']]},
  {cat:'Keuken',items:[
@@ -546,6 +546,7 @@ function shapeSVG(it,sw){
     case 'table':return R(x0,y0,w,d,c,'rx="3"');
     case 'roundtable':case 'pouf':return `<ellipse cx="0" cy="0" rx="${w/2}" ry="${d/2}" fill="${c}" stroke="${st}" stroke-width="${sw}"/>`;
     case 'dining':{const td=Math.max(70,d-100);let h=R(x0+4,-td/2,w-8,td,c,'rx="3"');const n=Math.max(1,Math.floor((w-10)/62));for(let i=0;i<n;i++){const cx=x0+(i+.5)*w/n;h+=chair(cx,-td/2-24,false)+chair(cx,td/2+24,true);}return h;}
+    case 'ovalDining':{const td=Math.max(60,d-100),a=w/2,b=td/2;let h=`<ellipse cx="0" cy="0" rx="${a}" ry="${b}" fill="${c}" stroke="${st}" stroke-width="${sw}"/>`;const n=Math.max(2,Math.floor((w-10)/62)),sp=Math.min(60,w*.78/n);for(let i=0;i<n;i++){const cx=(i-(n-1)/2)*sp,ey=b*Math.sqrt(Math.max(0,1-(cx/a)*(cx/a)));h=chair(cx,-ey-22,false)+chair(cx,ey+22,true)+h;}return h;}
     case 'roundDining':{const r=Math.max(35,(Math.min(w,d)-100)/2);let h='';[[0,-1],[0,1],[-1,0],[1,0]].forEach(([a,b])=>{const cx=a*(r+22),cy=b*(r+22);h+=`<rect x="${cx-21}" y="${cy-20}" width="42" height="40" rx="6" fill="${shade(it.c2||c,-.15)}" stroke="${st}" stroke-width="${sw}"/>`;});return h+C(0,0,r,c);}
     case 'rug':return `<rect x="${x0}" y="${y0}" width="${w}" height="${d}" rx="4" fill="${c}" fill-opacity=".7" stroke="${shade(c,-.3)}" stroke-width="${sw}" stroke-dasharray="${6*sw} ${4*sw}"/>`;
     case 'rugRound':return `<ellipse cx="0" cy="0" rx="${w/2}" ry="${d/2}" fill="${c}" fill-opacity=".7" stroke="${shade(c,-.3)}" stroke-width="${sw}" stroke-dasharray="${6*sw} ${4*sw}"/>`;
@@ -1037,6 +1038,7 @@ function buildItem(G,it,H){
     case 'table':{B(x0,-x0,z0,-z0,h-4,h,c);[[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([u,v])=>B(u*(w/2-8)-3,u*(w/2-8)+3,v*(d/2-8)-3,v*(d/2-8)+3,0,h-4,c2||shade(c,-.25)));break;}
     case 'roundtable':case 'pouf':{const r=Math.min(w,d)/2;if(it.s==='pouf')Cy(0,0,r,r,0,h,c);else{Cy(0,0,r,r,h-4,h,c,36);Cy(0,0,4,4,0,h-4,shade(c,-.3));Cy(0,0,r*.5,r*.5,0,2,shade(c,-.3));}break;}
     case 'dining':{const td=Math.max(70,d-100);B(x0+4,-x0-4,-td/2,td/2,71,75,c);[[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([u,v])=>B(u*(w/2-14)-3,u*(w/2-14)+3,v*(td/2-8)-3,v*(td/2-8)+3,0,71,shade(c,-.25)));const n=Math.max(1,Math.floor((w-10)/62));for(let i=0;i<n;i++){const cx=x0+(i+.5)*w/n;chair(cx,-td/2-24,-1);chair(cx,td/2+24,1);}break;}
+    case 'ovalDining':{const td=Math.max(60,d-100),a=w/2,b=td/2;const top=Cy(0,0,a,a,71,75,c,48);top.scale.z=b/a;Cy(0,0,6,6,0,71,shade(c,-.3));const base=Cy(0,0,a*.45,a*.45,0,2,shade(c,-.3),32);base.scale.z=b/a;const n=Math.max(2,Math.floor((w-10)/62)),sp=Math.min(60,w*.78/n);for(let i=0;i<n;i++){const cx=(i-(n-1)/2)*sp,ey=b*Math.sqrt(Math.max(0,1-(cx/a)*(cx/a)));chair(cx,-ey-22,-1);chair(cx,ey+22,1);}break;}
     case 'roundDining':{const r=Math.max(35,(Math.min(w,d)-100)/2);Cy(0,0,r,r,71,75,c,40);Cy(0,0,5,5,0,71,shade(c,-.3));[[0,-1],[0,1],[-1,0],[1,0]].forEach(([a,b])=>{const cx=a*(r+22),cz=b*(r+22);const s=20;B(cx-s,cx+s,cz-s,cz+s,44,49,shade(c,-.15));Cy(cx,cz,2,2,0,44,'#555');const bx=a!==0?cx+a*s:null;if(a!==0)B(bx-2,bx+2,cz-s,cz+s,49,88,shade(c,-.15));else B(cx-s,cx+s,cz+b*s-2,cz+b*s+2,49,88,shade(c,-.15));});break;}
     case 'bed':{B(x0,-x0,z0,-z0,0,30,c2||shade(c,-.25));B(x0+3,-x0-3,z0+8,-z0-3,30,52,'#f2f0ea');B(x0+2,-x0-2,z0+d*.32,-z0-1,52,57,c);B(x0,-x0,z0,z0+8,0,Math.min(h+50,110),c2||shade(c,-.18));const pw=w>=120?(w-24)/2:w-16;B(x0+8,x0+8+pw,z0+13,z0+13+Math.min(32,d*.16),52,63,'#ffffff');if(w>=120)B(-x0-8-pw,-x0-8,z0+13,z0+13+Math.min(32,d*.16),52,63,'#ffffff');break;}
     case 'counter':{const top=c2||(lum(c)>.5?'#3f3c38':'#d9d4cc');B(x0,-x0,z0,-z0,8,86,c);B(x0+4,-x0-4,z0,-z0-6,0,8,'#2f2c29');B(x0,-x0,z0,-z0,86,90,top);break;}
@@ -1081,7 +1083,7 @@ function initCaps(){
   window.claude.use('downloads').then(d=>{dlApi=d||null;}).catch(()=>{});
 }
 initCaps();
-const SHAPES={box:'Blok / kast',cabinet:'Lage kast',wardrobe:'Kledingkast',shelf:'Open kast',sofa:'Bank',cornersofa:'Hoekbank',chair:'Stoel',chairRound:'Draaistoel',pouf:'Poef / rond blok',table:'Tafel',roundtable:'Ronde tafel',dining:'Eettafel met stoelen',roundDining:'Ronde eettafel met stoelen',bed:'Bed',counter:'Keukenblok recht',counterL:'Keuken hoekopstelling',fridge:'Hoge kast / koelkast',appliance:'Apparaat',tv:'Tv-meubel',rug:'Vloerkleed',rugRound:'Rond vloerkleed',bath:'Bad',shower:'Douche',sink:'Wastafel',toilet:'Toilet',plant:'Plant',tree:'Boom / struik',lamp:'Lamp',parasol:'Parasol',planter:'Plantenbak',fence:'Scherm / schutting'};
+const SHAPES={box:'Blok / kast',cabinet:'Lage kast',wardrobe:'Kledingkast',shelf:'Open kast',sofa:'Bank',cornersofa:'Hoekbank',chair:'Stoel',chairRound:'Draaistoel',pouf:'Poef / rond blok',table:'Tafel',roundtable:'Ronde tafel',dining:'Eettafel met stoelen',roundDining:'Ronde eettafel met stoelen',ovalDining:'Ovale eettafel met stoelen',bed:'Bed',counter:'Keukenblok recht',counterL:'Keuken hoekopstelling',fridge:'Hoge kast / koelkast',appliance:'Apparaat',tv:'Tv-meubel',rug:'Vloerkleed',rugRound:'Rond vloerkleed',bath:'Bad',shower:'Douche',sink:'Wastafel',toilet:'Toilet',plant:'Plant',tree:'Boom / struik',lamp:'Lamp',parasol:'Parasol',planter:'Plantenbak',fence:'Scherm / schutting'};
 const MATS={mat:'Mat',hoogglans:'Hoogglans',hout:'Hout',stof:'Stof',leer:'Leer',metaal:'Metaal',steen:'Steen / marmer',beton:'Beton',glas:'Glas'};
 const catDef=k=>CAT[k]||(state.custom||[]).find(c=>c.k===k);
 const eur=v=>'€ '+Math.round(v).toLocaleString('nl-NL');
@@ -1172,7 +1174,7 @@ Link (je kunt hem NIET openen; gebruik alleen de tekst van de URL als hint): ${D
 Omschrijving van de gebruiker: ${D.desc||'-'}
 
 Bepaal wat het is en hoe we het als één element in het model zetten.
-- "vorm": kies de beste sleutel uit: ${Object.keys(SHAPES).join(', ')}. Een keuken in L-vorm = counterL, een rechte keuken of kookeiland = counter, een eettafel met stoelen = dining.
+- "vorm": kies de beste sleutel uit: ${Object.keys(SHAPES).join(', ')}. Een keuken in L-vorm = counterL, een rechte keuken of kookeiland = counter, een eettafel met stoelen = dining, een ovale eettafel = ovalDining.
 - Afmetingen in cm van het hele element zoals van bovenaf gezien (breedte = langste kant). Gebruik maten die zichtbaar of bekend zijn; anders een realistische schatting voor dit soort product. Voor een eettafel met stoelen: diepte inclusief stoelen (tafeldiepte + 100).
 - "kleur": hoofdkleur als hex (fronten, stof, blad). "kleur2": tweede kleur als hex (werkblad bij keukens, poten/frame, stoelen) of "".
 - "materiaal": kies uit ${Object.keys(MATS).join(', ')}.
@@ -1305,7 +1307,7 @@ Coördinaten
 - Richting: bij rot 0 zit de achterkant (rugleuning, hoofdeinde van een bed, achterkant van een kast of tv-meubel) aan de kant met de kleinste y en wijst de voorkant naar +y. rot 90: achterkant aan de rechterkant (+x). rot 180: achterkant aan de onderkant (+y). rot 270: achterkant aan de linkerkant (-x).
 - Tegen een muur zetten: achterkant naar de muur; afstand van de hartlijn van de muur tot het midden van het element = muurdikte/2 + diepte/2 + 1.
 - Hoekbank (cornersofa) en keuken hoekopstelling (counterL): bij rot 0 loopt het lange deel langs de achterkant over de volle breedte en het korte deel langs de linkerkant over de volle diepte. gespiegeld=true zet het korte deel rechts.
-- Eettafel met stoelen (dining): de diepte is inclusief stoelen (tafel + 100 cm).
+- Eettafel met stoelen (dining, ovalDining): de diepte is inclusief stoelen (tafel + 100 cm).
 
 Regels
 - Kies waar het kan een catalogussleutel; die geeft de juiste vorm. Anders een vorm uit: ${Object.keys(SHAPES).join(', ')}.
